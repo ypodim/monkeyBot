@@ -1,0 +1,56 @@
+<html>
+<script src="/static/jquery-3.2.1.min.js"></script>
+<script type="text/javascript">
+var trackingOn = true;
+$(document).ready(function(){
+    $( ".servo" ).click(function() {
+        var btn = $(this).html();
+        $.post("/actuator/servo", {servo:btn}, function(data) {
+            console.log(data);
+        }, "json");
+    });
+    $( ".motor" ).click(function() {
+        var btn = $(this).attr("id");
+        $.post("/actuator/motor", {direction:btn}, function(data) {
+            console.log(data);
+        }, "json");
+    });
+    $( "#tracking" ).click(function() {
+        trackingOn = !trackingOn;
+        if (trackingOn) {
+            $("#trackingStatus").html("Tracking!");
+        } else {
+            $("#trackingStatus").html("Not tracking");
+        }
+        $.post("/settings", {tracking:trackingOn}, function(data) {
+            console.log(data);
+        }, "json");
+    });
+});
+</script>
+<style type="text/css">
+button {
+    width: 100px;
+    height: 30px;
+}
+</style>
+<body>
+<div>
+    <button class="servo" id="left">left</button>
+    <button class="servo" id="right">right</button>
+</div>
+<div>
+    <button class="servo" id="up">up</button>
+    <button class="servo" id="down">down</button>
+</div>
+<div>
+    <button class="motor" id="motor_left">motor left</button>
+    <button class="motor" id="motor_right">motor right</button>
+</div>
+<div>
+    <button class="tracking" id="tracking">toggle tracking</button>
+    <div id="trackingStatus">Not tracking</div>
+</div>
+<!-- <div><img src="/static/pic.jpg" /></div> -->
+</body>
+</html>
