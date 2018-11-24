@@ -40,3 +40,9 @@ class Motors(object):
 
     def stop(self):
         self.speed = 0
+
+
+def main():
+    print("Ok")
+if __name__=="__main__":
+    main()

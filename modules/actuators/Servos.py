@@ -1,6 +1,6 @@
 import socket
-import time
 import json
+from PWM import sendPWM
 
 class Servos(object):
     """docstring for Servos"""

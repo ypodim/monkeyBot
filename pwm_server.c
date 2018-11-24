@@ -18,8 +18,8 @@ sudo ./servo_demo 23 24 25 # Send servo pulses to GPIO 23, 24, 25.
 
 #define NUM_GPIO 32
 
-#define MIN_WIDTH 650
-#define MAX_WIDTH 2000
+#define MIN_WIDTH 630
+#define MAX_WIDTH 2410
 
 int run=1;
 
