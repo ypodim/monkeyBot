@@ -9,7 +9,7 @@ import os
 from collections.abc import MutableMapping
 from tornado.options import define, options
 
-define("port", default=80, help="run on the given port", type=int)
+define("port", default=8000, help="run on the given port", type=int)
 # define("html_path", default=os.path.dirname(os.path.realpath(__file__)) + '/www/', type=str)
 # html_page_path = dir_path = os.path.dirname(os.path.realpath(__file__)) + '/www/'
 
