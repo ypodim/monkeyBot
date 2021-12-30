@@ -8,7 +8,7 @@ class UsbCamera(object):
     """ Init camera """
     def __init__(self):
         # select first video device in system
-        self.cam = cv2.VideoCapture(1)
+        self.cam = cv2.VideoCapture(0)
         # set camera resolution
         self.w = 800
         self.h = 600
