@@ -48,8 +48,20 @@ class StreamHandler(tornado.web.RequestHandler):
     def initialize(self, cam):
         self.cam = cam
     async def get_frame(self):
-        self.jpg, image = self.cam.get_frame(True)
-        
+        # self.jpg, image = self.cam.get_frame(True)
+
+        jpg = None
+        grabbed_frame = False
+        try:
+            jpg = self.cam.q.get(block=False)
+            grabbed_frame = True
+            self.cam.q.task_done()
+        except:
+            pass
+            # if last_image is None:
+                # continue
+        return grabbed_frame, jpg
+
     async def get(self):
         self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, pre-check=0, post-check=0, max-age=0')
         self.set_header('Pragma', 'no-cache')
@@ -59,11 +71,14 @@ class StreamHandler(tornado.web.RequestHandler):
         my_boundary = "--FRAME\r\n"
 
         while 1:
-            await self.get_frame()
+            grabbed_frame, jpg = await self.get_frame()
+            if not grabbed_frame:
+                await asyncio.sleep(0.01)
+                continue
             self.write(my_boundary)
             self.write('Content-Type: image/jpeg\r\n')
             self.write('Content-length: %s\r\n\r\n' % len(self.jpg))
-            self.write(self.jpg)
+            self.write(jpg) # self.jpg must die
             self.write(b'\r\n')
             try:
                 await self.flush()
