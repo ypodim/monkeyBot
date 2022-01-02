@@ -1,7 +1,5 @@
 $(document).ready(function(){
 
-    $(':checkbox').checkboxpicker();
-
     function ChangeRes(w, h){
         var data = new FormData();
         data.append('width', w);
@@ -24,12 +22,29 @@ $(document).ready(function(){
         ChangeRes(800, 600);
 	})
 
-	$(':checkbox').checkboxpicker().change(function() {
-        if($('input[name="agree"]:checked').length > 0) {
-            document.getElementById("videofield").src="video_feed?fd=true";
-        }
-        else{
-            document.getElementById("videofield").src="video_feed?fd=false";
-        }
-    });
+	// $(':checkbox').checkboxpicker().change(function() {
+ //        if($('input[name="agree"]:checked').length > 0) {
+ //            document.getElementById("videofield").src="video_feed?fd=true";
+ //        }
+ //        else{
+ //            document.getElementById("videofield").src="video_feed?fd=false";
+ //        }
+ //    });
+
+    $("button").click(function(){
+        var data = new FormData();
+        var cmd = $(this).attr("cmd");
+        data.append('cmd', cmd);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/command', true);
+        // xhr.onload = function(oEvent) {
+        //     if (xhr.status == 200) {
+        //       console.log("done!");
+        //     } else {
+        //       console.log("Error " + xhr.status);
+        //     }
+        // };
+        xhr.send(data);
+    })
 });

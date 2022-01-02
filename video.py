@@ -65,6 +65,7 @@ class UsbCamera(object):
         else:
             image = np.zeros((self.h, self.w, 3), np.uint8)
             cv2.putText(image, 'No camera', (40, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1)
+            self.cam = cv2.VideoCapture(0)
         # encoding picture to jpeg
         
         ret, jpeg = cv2.imencode('.jpg', image)
