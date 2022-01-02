@@ -1,22 +1,67 @@
 #!/usr/bin/env python
 import cv2
 import numpy as np
+import time
+from threading import Thread
+from queue import Queue
+from datetime import datetime
 
+def putIterationsPerSec(frame, iterations_per_sec):
+    """
+    Add iterations per second text to lower-left corner of a frame.
+    """
+
+    cv2.putText(frame, "{:.0f} iterations/sec".format(iterations_per_sec),
+        (10, 450), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255))
+    return frame
+
+class CountsPerSec:
+    """
+    Class that tracks the number of occurrences ("counts") of an
+    arbitrary event and returns the frequency in occurrences
+    (counts) per second. The caller must increment the count.
+    """
+
+    def __init__(self):
+        self._start_time = None
+        self._num_occurrences = 0
+
+    def start(self):
+        self._start_time = datetime.now()
+        return self
+
+    def increment(self):
+        self._num_occurrences += 1
+
+    def countsPerSec(self):
+        elapsed_time = (datetime.now() - self._start_time).total_seconds()
+        return self._num_occurrences / elapsed_time if elapsed_time > 0 else 0
 
 class UsbCamera(object):
 
     """ Init camera """
-    def __init__(self):
+    def __init__(self, dev=0):
         # select first video device in system
-        self.cam = cv2.VideoCapture(0)
+        self.cam = cv2.VideoCapture(dev)
         # set camera resolution
-        self.w = 800
-        self.h = 600
+        self.w = 1024
+        self.h = 768
         # set crop factor
         self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.h)
         self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.w)
         # load cascade file
         self.face_cascade = cv2.CascadeClassifier('face.xml')
+        self.running = True
+        self.q = Queue(maxsize=100)
+    def start(self):
+        Thread(target=self.run, args=()).start()
+        return self
+    def stop(self):
+        self.running = False
+    def run(self):
+        while self.running:
+            jpeg, image = self.get_frame(True)
+            self.q.put(image)
 
     def set_resolution(self, new_w, new_h):
         """
@@ -73,11 +118,26 @@ class UsbCamera(object):
 
 
 if __name__=='__main__':
-    c = UsbCamera()
+    cam = UsbCamera(1).start()
+    cps = CountsPerSec().start()
+    
+    last_image = None
     while 1:
-        jpeg, image = c.get_frame(True)
-        cv2.imshow("the pol", image)
+        grabbed_frame = False
+        try:
+            image = cam.q.get(block=False)
+            last_image = image
+            grabbed_frame = True
+        except:
+            if last_image is None:
+                continue
+        frame = putIterationsPerSec(last_image, cps.countsPerSec())
+        cv2.imshow("the pol", frame)
+        if grabbed_frame:
+            cam.q.task_done()
+        cps.increment()
         key = cv2.waitKey(1)
         if key == ord('q'):
+            cam.stop()
             break
 
