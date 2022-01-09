@@ -55,12 +55,13 @@ class Motor:
         self.targetPos = min(targetPos, self.maxPos)
         self.targetPos = max(targetPos, self.minPos)
         self.clb = clb
-        print(f"{self.name}: at {self.pos} - target {self.targetPos}")
+        # print(f"{self.name}: at {self.pos} - target {self.targetPos}")
         self.loop.call_later(delay, self.step)
     def step(self):
         if self.targetPos == self.pos:
             self.state = "ok"
-            self.stepper.release()
+            # self.stepper.release()
+            self.loop.call_later(0.5, self.stepper.release)
             self.clb(self.name)
             return
 
@@ -69,13 +70,14 @@ class Motor:
         
         if self.dir == stepper.FORWARD:  self.pos += 1
         if self.dir == stepper.BACKWARD: self.pos -= 1
-        print(f"{self.name}: new pos {self.pos} - target {self.targetPos}")
+        # print(f"{self.name}: new pos {self.pos} - target {self.targetPos}")
         self.loop.call_later(self.speedDelay, self.step)
 
     def setDir(self, direction: bool):
         if direction: self.dir = stepper.FORWARD
         else:         self.dir = stepper.BACKWARD
-
+    def hold(self):
+        self.stepper.onestep(style=1000)
     def cleanup(self):
         self.stepper.release()
 
@@ -85,28 +87,30 @@ class Bot:
         self.steppers = MotorKit(address=0x61, i2c=board.I2C())
         self.pwms = MotorKit(address=0x60, i2c=board.I2C())
         self.sound = Sounds()
+        self.light = Light(self.pwms.motor4)
         # self.sound.play_preset("hi")
 
         motorAconf = dict(
             name="motorA",
-            speedDelay=0.0002,
+            speedDelay=0.005,
             minPos=-400,
             maxPos=400,
             stepper=self.steppers.stepper1,
             loop=self.loop)
         motorBconf = dict(
             name="motorB",
-            speedDelay=0.001,
+            speedDelay=0.002,
             minPos=-1200,
             maxPos=1200,
             stepper=self.steppers.stepper2,
             loop=self.loop)
         self.A = Motor(motorAconf)
         self.B = Motor(motorBconf)
+        self.wp = Waypoints()
 
     def readyClb(self, motor_name, delay=1):
         if self.A.state == "ok" and self.B.state == "ok":
-            print(f"both done with {self.wp.current()}")
+            # print(f"both done with {self.wp.current()}")
             self.sound.play_preset("bye")
             if self.wp.isDone():
                 pass
@@ -117,12 +121,13 @@ class Bot:
                 self.B.setPos(p.b, self.readyClb, delay=delay)
         else:
             if self.A.state != "ok":
-                print("motorA still working: %s" % self.A.state)
+                # print("motorA still working: %s" % self.A.state)
+                pass
             if self.B.state != "ok":
-                print("motorB still working: %s" % self.B.state)
+                # print("motorB still working: %s" % self.B.state)
+                pass
 
     def play_twitch(self, actions):
-        self.wp = Waypoints()
         for a in actions:
             self.wp.add(Point(a[0], a[1]))
         p = self.wp.next()
@@ -135,9 +140,13 @@ class Bot:
         actions = []
         if cmd == "peek_up_left": actions = [(0,-50), (0,0)]
         if cmd == "peek_right": actions = [(-50,0), (0,0)]
-        if cmd == "down": actions = [(0,10)]
-        if cmd == "up": actions = [(0,-10)]
-        if cmd == "test": self.A.stepper.onestep(style=1000)
+        if cmd == "down": self.B.setPos(self.B.pos + 10, self.readyClb)
+        if cmd == "up": actions = self.B.setPos(self.B.pos - 10, self.readyClb)
+        if cmd == "holdb": self.B.hold()
+        if cmd == "releaseb": self.B.hold()
+        if cmd == "light": self.light.toggle()
+        if cmd == "sound": self.sound.play_preset("bye")
+        if cmd == "test": pass
 
         if actions:
             self.play_twitch(actions)
@@ -156,6 +165,19 @@ class Bot:
         self.A.cleanup()
         self.B.cleanup()
         print("bot cleaned up")
+
+class Light:
+    def __init__(self, pwm):
+        self.on = False
+        self.pwm = pwm
+    def toggle(self):
+        if self.on:
+            self.pwm.throttle = 0
+        else:
+            self.pwm.throttle = 0.1
+
+        self.on = not self.on
+
 
 class Eye:
     def __init__2(self):
@@ -191,12 +213,14 @@ class Eye:
 if __name__=="__main__":
     try:
         # e = Eye()
+        import time
+        import tornado.ioloop
 
-        b = Bot()
+        b = Bot(tornado.ioloop.IOLoop.current())
         # b.run()
-        b.pwms.motor1.throttle = 0.1
-
-        b.pwms.motor1.throttle = None
+        b.pwms.motor4.throttle = 0.1
+        time.sleep(3)
+        b.pwms.motor4.throttle = None
 
     except KeyboardInterrupt:
         print("exiting")

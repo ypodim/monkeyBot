@@ -81,5 +81,5 @@ class Sounds:
 
 if __name__ == "__main__":
     s=Sounds()
-    s.play(200, 0.2)
+    s.play(200, 0.5)
 

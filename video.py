@@ -5,6 +5,7 @@ import time
 from threading import Thread
 from queue import Queue
 from datetime import datetime
+from motion import Detector
 
 def putIterationsPerSec(frame, iterations_per_sec):
     """
@@ -37,6 +38,22 @@ class CountsPerSec:
         elapsed_time = (datetime.now() - self._start_time).total_seconds()
         return self._num_occurrences / elapsed_time if elapsed_time > 0 else 0
 
+class CameraReader(object):
+    def __init__(self, cam):
+        self.cam = cam
+        self.q = Queue(maxsize=10)
+        self.running = 1
+    def start(self):
+        Thread(target=self.run, args=()).start()
+        return self
+    def run(self):
+        while self.running:
+            success, image = self.cam.read()
+            if success:
+                self.q.put(image)
+    def stop(self):
+        self.running = False
+
 class UsbCamera(object):
 
     """ Init camera """
@@ -44,24 +61,29 @@ class UsbCamera(object):
         # select first video device in system
         self.cam = cv2.VideoCapture(dev)
         # set camera resolution
-        self.w = 1024
-        self.h = 768
+        self.w = 640
+        self.h = 480
         # set crop factor
         self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.h)
         self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.w)
         # load cascade file
         self.face_cascade = cv2.CascadeClassifier('face.xml')
         self.running = True
+        self.cps = CountsPerSec().start()
         self.q = Queue(maxsize=100)
+        self.detector = Detector()
+        # self.reader = CameraReader(self.cam).start()
     def start(self):
         Thread(target=self.run, args=()).start()
         return self
     def stop(self):
+        # self.reader.stop()
         self.running = False
     def run(self):
         while self.running:
-            jpeg, image = self.get_frame(True)
-            self.q.put(image)
+            jpeg, image = self.get_frame()
+            self.q.put(jpeg)
+            self.cps.increment()
 
     def set_resolution(self, new_w, new_h):
         """
@@ -82,44 +104,57 @@ class UsbCamera(object):
             # bad params
             raise Exception('Not int value')
 
-    def get_frame(self, fdenable):
+    def face_recognition(self, image):
+        # resize image for speeding up recognize
+        gray = cv2.resize(image, (320, 240))
+        # make it grayscale
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+        # face cascade detector
+        faces = self.face_cascade.detectMultiScale(gray)
+        # draw rect on face arias
+        scale = float(self.w / 320.0)
+        count = 0
+        for f in faces:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            x, y, z, t = [int(float(v) * scale) for v in f]
+            cv2.putText(image, str(x) + ' ' + str(y), (0, (self.h - 10 - 25 * count)), font, 1, (0, 0, 0), 2)
+            count += 1
+            cv2.rectangle(image, (x, y), (x + z, y + t), (255, 255, 255), 2)
+        return image
+
+    def get_frame(self, fdenable=False, motion_detection=True):
         """
         functionality: Gets frame from camera and try to find feces on it
         :return: byte array of jpeg encoded camera frame
         """
+        t0 = time.time()
         success, image = self.cam.read()
+        # image = self.reader.q.get()
+        # self.reader.q.task_done()
+        # success = True
+        t1 = time.time()
         if success:
             # scale image
-            image = cv2.resize(image, (self.w, self.h))
+            # image = cv2.resize(image, (self.w, self.h))
             if fdenable:
-                # resize image for speeding up recognize
-                gray = cv2.resize(image, (320, 240))
-                # make it grayscale
-                gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
-                # face cascade detector
-                faces = self.face_cascade.detectMultiScale(gray)
-                # draw rect on face arias
-                scale = float(self.w / 320.0)
-                count = 0
-                for f in faces:
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    x, y, z, t = [int(float(v) * scale) for v in f]
-                    cv2.putText(image, str(x) + ' ' + str(y), (0, (self.h - 10 - 25 * count)), font, 1, (0, 0, 0), 2)
-                    count += 1
-                    cv2.rectangle(image, (x, y), (x + z, y + t), (255, 255, 255), 2)
+                image = self.face_recognition(image)
+            if motion_detection:
+                image = self.detector.detect(image)
         else:
             image = np.zeros((self.h, self.w, 3), np.uint8)
             cv2.putText(image, 'No camera', (40, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1)
-            self.cam = cv2.VideoCapture(0)
         # encoding picture to jpeg
-        
+        image = putIterationsPerSec(image, self.cps.countsPerSec())
+
+        t2 = time.time()
         ret, jpeg = cv2.imencode('.jpg', image)
+        t3 = time.time()
+        # print(t1-t0, t2-t1, t3-t2)
         return jpeg.tobytes(), image
 
 
 if __name__=='__main__':
     cam = UsbCamera(1).start()
-    cps = CountsPerSec().start()
     
     last_image = None
     while 1:
@@ -131,11 +166,11 @@ if __name__=='__main__':
         except:
             if last_image is None:
                 continue
-        frame = putIterationsPerSec(last_image, cps.countsPerSec())
+        # frame = putIterationsPerSec(last_image, cps.countsPerSec())
         cv2.imshow("the pol", frame)
         if grabbed_frame:
             cam.q.task_done()
-        cps.increment()
+        # cps.increment()
         key = cv2.waitKey(1)
         if key == ord('q'):
             cam.stop()

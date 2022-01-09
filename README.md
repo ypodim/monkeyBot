@@ -9,3 +9,6 @@ https://stackoverflow.com/questions/60716059/how-to-block-less-while-streaming-v
 
 basic detection:
 https://www.geeksforgeeks.org/webcam-motion-detector-python/
+
+Multithreading with OpenCV
+https://nrsyed.com/2018/07/05/multithreading-with-opencv-python-to-improve-video-processing-performance/

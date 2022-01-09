@@ -47,8 +47,8 @@ class Store(MutableMapping):
         return "%s" % self.store
 
 class HtmlPageHandler(tornado.web.RequestHandler):
-    def initialize(self, store):
-        self.store = store
+    # def initialize(self, store):
+        # self.store = store
     def get(self):
         self.render('index.html')
 
@@ -58,24 +58,21 @@ class CommandHandler(tornado.web.RequestHandler):
     async def post(self):
         cmd = self.get_argument('cmd')
         self.bot.run(cmd)
-        self.write(dict(result="ok"))
+        self.write(dict(result="ok", cmd=cmd))
 
 class StreamHandler(tornado.web.RequestHandler):
     def initialize(self, cam):
         self.cam = cam
     async def get_frame(self):
-        # self.jpg, image = self.cam.get_frame(True)
-
         jpg = None
         grabbed_frame = False
         try:
+            # print(self.cam.q.qsize())
             jpg = self.cam.q.get(block=False)
             grabbed_frame = True
             self.cam.q.task_done()
         except:
             pass
-            # if last_image is None:
-                # continue
         return grabbed_frame, jpg
 
     async def get(self):
@@ -91,27 +88,31 @@ class StreamHandler(tornado.web.RequestHandler):
             if not grabbed_frame:
                 await asyncio.sleep(0.01)
                 continue
-                
+
             self.write(my_boundary)
             self.write('Content-Type: image/jpeg\r\n')
-            self.write('Content-length: %s\r\n\r\n' % len(self.jpg))
+            self.write('Content-length: %s\r\n\r\n' % len(jpg))
             self.write(jpg) # self.jpg must die
             self.write(b'\r\n')
-            print("wrote data to stream: %s" % (time.time() - start))
+            # print("wrote data to stream: %s" % (time.time() - start))
             try:
                 await self.flush()
                 await asyncio.sleep(0.0001)
             except tornado.iostream.StreamClosedError:
                 print("stupid client left. Good riddance.")
                 return
-            print("end of loop: %s" % (time.time()-start))
+            # print("end of loop: %s" % (time.time()-start))
 
 class Application(tornado.web.Application):
-    def __init__(self, store, cam, bot):
+    def __init__(self):
+        io_loop = tornado.ioloop.IOLoop.current()
+        self.cam = video.UsbCamera().start()
+        self.bot = Bot(io_loop)
         handlers = [
-            (r"/", HtmlPageHandler, dict(store=store)),
-            (r"/command", CommandHandler, dict(bot=bot)),
-            (r"/video_feed", StreamHandler, dict(cam=cam)),
+            (r"/", HtmlPageHandler),
+            (r"/index.html", HtmlPageHandler),
+            (r"/command", CommandHandler, dict(bot=self.bot)),
+            (r"/video_feed", StreamHandler, dict(cam=self.cam)),
             (r'/favicon.ico', tornado.web.StaticFileHandler),
             (r'/static/', tornado.web.StaticFileHandler),
             (r'/(?:js)/(.*)', tornado.web.StaticFileHandler, dict(path='./js')),
@@ -124,39 +125,23 @@ class Application(tornado.web.Application):
         )
         super(Application, self).__init__(handlers, **settings)
 
+    def start(self):
+        tornado.options.parse_command_line()
+        tornado.log.enable_pretty_logging()
+                
+        signal.signal(signal.SIGTERM, functools.partial(self.sig_handler))
+        signal.signal(signal.SIGINT, functools.partial(self.sig_handler))
 
-def main():
-    tornado.options.parse_command_line()
-    tornado.log.enable_pretty_logging()
-    io_loop = tornado.ioloop.IOLoop.current()
+        self.listen(options.port)
+        tornado.ioloop.IOLoop.instance().start()
 
-    cam = video.UsbCamera()
-    store = Store()
-    bot = Bot(io_loop)
-    app = Application(store, cam, bot)
-    
-    signal.signal(signal.SIGTERM, functools.partial(sig_handler, app, bot))
-    signal.signal(signal.SIGINT, functools.partial(sig_handler, app, bot))
-
-    
-    app.listen(options.port)
-    # await shutdown_event.wait()
-    tornado.ioloop.IOLoop.instance().start()
-
-def sig_handler(app, bot, sig, frame):
-    logging.warning('Caught signal: %s', sig)
-    tornado.ioloop.IOLoop.instance().stop()
-    bot.cleanup()
-    # app.stop()
+    def sig_handler(self, sig, frame):
+        logging.warning('Caught signal: %s', sig)
+        tornado.ioloop.IOLoop.instance().stop()
+        self.bot.cleanup()
+        self.cam.stop()
 
 if __name__ == "__main__":
-    main()
-
-    # shutdown_event = tornado.locks.Event()
-    # try:
-    #     tornado.ioloop.IOLoop.current().run_sync(lambda: main(shutdown_event))
-    # except KeyboardInterrupt:
-    #     print("time to die")
-    #     shutdown_event.set()
-
+    app = Application()
+    app.start()
 
